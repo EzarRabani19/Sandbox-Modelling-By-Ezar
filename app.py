@@ -5,7 +5,7 @@ import pandas as pd
 
 # Konfigurasi Halaman
 st.set_page_config(
-    page_title="GeoStruct 3D — High-Res Structural Geology Sandbox",
+    page_title="GeoStruct 3D — High-Res Structural Geology Sandbox By Ezar",
     layout="wide",
     initial_sidebar_state="expanded"
 )

@@ -5,13 +5,13 @@ import pandas as pd
 
 # Konfigurasi Halaman
 st.set_page_config(
-    page_title="GeoStruct 3D — Structural Geology Sandbox",
+    page_title="GeoStruct 3D — High-Res Structural Geology Sandbox",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-st.title("GeoStruct 3D: Kinematic Structural Geology Sandbox")
-st.caption("Simulasi 3D Blok Stratigrafi, Kinematika Sesar (Normal, Reverse, Strike-Slip, Oblique), Fault-Drag Folding, & Erosi.")
+st.title("GeoStruct 3D: High-Resolution Structural Geology Sandbox")
+st.caption("Pemodelan Blok Geologi 3D Solid Beresolusi Tinggi, Kinematika Sesar, Fault-Drag Folding, Strain Mapping, & Erosi.")
 
 # --- SIDEBAR: KONTROL PARAMETER GEOLOGI ---
 st.sidebar.header("1. Preset Skenario Tektonik")
@@ -27,7 +27,6 @@ preset = st.sidebar.selectbox(
     ]
 )
 
-# Nilai default berdasarkan preset
 defaults = {
     "strike": 0, "dip": 60, "dip_slip": 0.0, "strike_slip": 0.0,
     "fold_amp": 1.5, "drag_width": 4.5, "erosion": False, "erosion_lvl": 4.5
@@ -45,29 +44,36 @@ elif preset == "4. Oblique-Slip Fault":
 st.sidebar.header("2. Geometri & Kinematika Sesar")
 strike = st.sidebar.slider("Strike (° - Right Hand Rule)", 0, 360, defaults["strike"], 1)
 dip = st.sidebar.slider("Dip Angle (°)", 15, 88, defaults["dip"], 1)
-dip_slip = st.sidebar.slider("Dip-Slip (m) [- Normal | + Reverse]", -10.0, 10.0, defaults["dip_slip"], 0.2)
-strike_slip = st.sidebar.slider("Strike-Slip (m) [- Sinistral | + Dextral]", -10.0, 10.0, defaults["strike_slip"], 0.2)
+dip_slip = st.sidebar.slider("Dip-Slip (m) [- Normal | + Reverse]", -10.0, 10.0, defaults["dip_slip"], 0.1)
+strike_slip = st.sidebar.slider("Strike-Slip (m) [- Sinistral | + Dextral]", -10.0, 10.0, defaults["strike_slip"], 0.1)
 
 st.sidebar.header("3. Lipatan & Proses Permukaan")
 fold_amp = st.sidebar.slider("Intensitas Fault-Drag Fold", 0.0, 4.0, defaults["fold_amp"], 0.1)
-drag_width = st.sidebar.slider("Lebar Zona Shear/Drag (m)", 1.0, 10.0, defaults["drag_width"], 0.5)
+drag_width = st.sidebar.slider("Lebar Zona Shear/Drag (m)", 1.0, 10.0, defaults["drag_width"], 0.25)
 enable_erosion = st.sidebar.checkbox("Aktifkan Erosi Permukaan", value=defaults["erosion"])
-erosion_lvl = st.sidebar.slider("Level Erosi (m)", -2.0, 10.0, defaults["erosion_lvl"], 0.2, disabled=not enable_erosion)
+erosion_lvl = st.sidebar.slider("Level Erosi (m)", -2.0, 10.0, defaults["erosion_lvl"], 0.1, disabled=not enable_erosion)
 
-st.sidebar.header("4. Tampilan Visual")
+st.sidebar.header("4. Resolusi & Mode Visualisasi")
+grid_res = st.sidebar.select_slider(
+    "Resolusi Mesh 3D (Grid Nodes)",
+    options=[60, 90, 120, 150, 180],
+    value=120
+)
+color_mode = st.sidebar.radio(
+    "Mode Pewarnaan Blok:",
+    ["Lithology (Formasi Batuan)", "Shear Strain Intensity (Regangan)"]
+)
 show_fault_plane = st.sidebar.checkbox("Tampilkan Bidang Sesar", value=True)
-grid_res = st.sidebar.select_slider("Resolusi Mesh 3D", options=[30, 45, 60, 80], value=45)
+show_grid_lines = st.sidebar.checkbox("Tampilkan Garis Kontur Mesh", value=False)
 
 # --- ENGINE KALKULASI VEKTOR GEOLOGI ---
 def compute_fault_vectors(strike_deg, dip_deg):
     s_rad = np.radians(strike_deg)
     d_rad = np.radians(dip_deg)
 
-    # Vektor Strike (Sistem koordinat: X = East, Y = North, Z = Elevation)
     strike_vec = np.array([np.sin(s_rad), np.cos(s_rad), 0.0])
     strike_vec /= np.linalg.norm(strike_vec)
 
-    # Arah Dip (90 derajat searah jarum jam dari Strike sesuai Right-Hand Rule)
     dip_dir_horiz = np.array([np.cos(s_rad), -np.sin(s_rad), 0.0])
     dip_vec = np.array([
         dip_dir_horiz[0] * np.cos(d_rad),
@@ -76,7 +82,6 @@ def compute_fault_vectors(strike_deg, dip_deg):
     ])
     dip_vec /= np.linalg.norm(dip_vec)
 
-    # Normal bidang sesar mengarah ke Hanging Wall (ke atas/arah dip)
     normal = np.cross(strike_vec, dip_vec)
     normal /= np.linalg.norm(normal)
     if normal[2] < 0:
@@ -102,7 +107,6 @@ elif abs(strike_slip) > abs(dip_slip) * 1.5:
 else:
     regime = "Oblique-Slip Fault"
 
-# Tampilkan Metrik di Atas
 m1, m2, m3, m4, m5 = st.columns(5)
 m1.metric("Rezim Struktur", regime)
 m2.metric("Net Slip", f"{net_slip:.2f} m")
@@ -110,13 +114,15 @@ m3.metric("Throw (Vertikal)", f"{throw:.2f} m")
 m4.metric("Heave (Horizontal)", f"{heave:.2f} m")
 m5.metric("Rake / Pitch", f"{rake_deg:.1f}°")
 
-# --- PEMODELAN 3D STRATIGRAFI & DEFORMASI ---
+# --- DEFINISI STRATIGRAFI DETAIL (7 LAPISAN) ---
 layers = [
-    {"name": "Alluvium / Topsoil", "z_top": 5.0, "z_bot": 3.5, "color": "#C05621"},
-    {"name": "Limestone (Reservoir)", "z_top": 3.5, "z_bot": 1.5, "color": "#3182CE"},
-    {"name": "Shale (Caprock)", "z_top": 1.5, "z_bot": 0.0, "color": "#2F855A"},
-    {"name": "Sandstone", "z_top": 0.0, "z_bot": -2.0, "color": "#D69E2E"},
-    {"name": "Basement (Granite)", "z_top": -2.0, "z_bot": -5.0, "color": "#4A5568"},
+    {"name": "Alluvium / Topsoil", "z_top": 5.0, "z_bot": 3.8, "color": "#C05621"},
+    {"name": "Upper Sandstone", "z_top": 3.8, "z_bot": 2.4, "color": "#ECC94B"},
+    {"name": "Shale Caprock", "z_top": 2.4, "z_bot": 1.2, "color": "#2F855A"},
+    {"name": "Reef Limestone (Reservoir)", "z_top": 1.2, "z_bot": -0.4, "color": "#3182CE"},
+    {"name": "Siltstone / Mudstone", "z_top": -0.4, "z_bot": -1.8, "color": "#38B2AC"},
+    {"name": "Lower Conglomerate", "z_top": -1.8, "z_bot": -3.2, "color": "#B7791F"},
+    {"name": "Crystalline Basement", "z_top": -3.2, "z_bot": -5.5, "color": "#4A5568"},
 ]
 
 block_x, block_y = 15.0, 12.0
@@ -124,24 +130,40 @@ x_lin = np.linspace(-block_x, block_x, grid_res)
 y_lin = np.linspace(-block_y, block_y, grid_res)
 X_base, Y_base = np.meshgrid(x_lin, y_lin)
 
-def deform_surface(X, Y, z_init, side_mask):
-    """Menerapkan kinematika sesar + fault-drag folding + erosi pada grid permukaan."""
-    pts = np.stack([X, Y, np.full_like(X, z_init)], axis=-1)
+def apply_kinematics(X, Y, Z, side_mask):
+    """Menerapkan kinematika sesar berpresisi tinggi, snapping bidang sesar, drag fold, dan erosi."""
+    pts = np.stack([X, Y, Z], axis=-1)
     signed_dist = np.tensordot(pts, normal_vec, axes=([2], [0]))
 
-    # Masking sisi blok (Footwall vs Hanging Wall) agar patahan terputus tajam
-    valid = (signed_dist <= 0.0) if side_mask == "footwall" else (signed_dist > 0.0)
-    
+    # Toleransi snap agar tepi patahan menyentuh bidang sesar dengan presisi tanpa celah
+    tol = (2 * block_x / grid_res) * 0.65
+    if side_mask == "footwall":
+        valid = signed_dist <= tol
+        snap_mask = (signed_dist > 0) & (signed_dist <= tol)
+    else:
+        valid = signed_dist >= -tol
+        snap_mask = (signed_dist < 0) & (signed_dist >= -tol)
+
     X_out = np.where(valid, X, np.nan)
     Y_out = np.where(valid, Y, np.nan)
-    Z_out = np.where(valid, z_init, np.nan)
+    Z_out = np.where(valid, Z, np.nan)
 
-    # Efek Fault-Drag Folding (melengkung di sekitar bidang sesar)
+    # Snap titik tepi tepat ke bidang sesar (signed_dist = 0) agar batas patahan tajam
+    if np.any(snap_mask):
+        X_out = np.where(snap_mask, X_out - signed_dist * normal_vec[0], X_out)
+        Y_out = np.where(snap_mask, Y_out - signed_dist * normal_vec[1], Y_out)
+        Z_out = np.where(snap_mask, Z_out - signed_dist * normal_vec[2], Z_out)
+        signed_dist = np.where(snap_mask, 0.0, signed_dist)
+
+    # Efek Fault-Drag Folding
     drag_factor = np.exp(-(signed_dist**2) / (2 * drag_width**2))
-    drag_sign = np.where(signed_dist >= 0, -1.0, 1.0)
+    drag_sign = -1.0 if side_mask == "hanging_wall" else 1.0
     Z_out = Z_out + drag_sign * drag_factor * (dip_slip * 0.25) * fold_amp
 
-    # Pergeseran blok Hanging Wall sepanjang vektor Dip-Slip & Strike-Slip
+    # Hitung nilai regangan (Shear Strain Intensity)
+    strain_val = drag_factor * (net_slip / 10.0) * (1.0 + fold_amp * 0.3)
+
+    # Pergeseran blok Hanging Wall
     if side_mask == "hanging_wall":
         disp = (-dip_slip * dip_vec) + (strike_slip * strike_vec)
         X_out = X_out + disp[0]
@@ -152,46 +174,82 @@ def deform_surface(X, Y, z_init, side_mask):
     if enable_erosion:
         Z_out = np.where(Z_out > erosion_lvl, erosion_lvl, Z_out)
 
-    return X_out, Y_out, Z_out
+    return X_out, Y_out, Z_out, strain_val
 
 # --- RENDER VISUALISASI 3D & STEREONET ---
-col_3d, col_stereo = st.columns([2.3, 1.0])
+col_3d, col_stereo = st.columns([2.4, 1.0])
 
 with col_3d:
     fig3d = go.Figure()
+    contour_cfg = dict(
+        x=dict(show=show_grid_lines, color="rgba(0,0,0,0.3)", width=1),
+        y=dict(show=show_grid_lines, color="rgba(0,0,0,0.3)", width=1)
+    )
 
-    # Render setiap lapisan pada Footwall & Hanging Wall
     for idx, layer in enumerate(layers):
         for side in ["footwall", "hanging_wall"]:
-            Xt, Yt, Zt = deform_surface(X_base, Y_base, layer["z_top"], side)
+            # 1. Permukaan Atas (Top Horizon)
+            Xt, Yt, Zt, St = apply_kinematics(X_base, Y_base, np.full_like(X_base, layer["z_top"]), side)
+            
+            if color_mode == "Lithology (Formasi Batuan)":
+                surf_kwargs = dict(
+                    colorscale=[[0, layer["color"]], [1, layer["color"]]],
+                    showscale=False
+                )
+            else:
+                surf_kwargs = dict(
+                    surfacecolor=St,
+                    colorscale="Turbo",
+                    cmin=0.0,
+                    cmax=1.5,
+                    showscale=(idx == 0 and side == "footwall"),
+                    colorbar=dict(title="Shear Strain", x=1.02, len=0.6)
+                )
+
             fig3d.add_trace(go.Surface(
                 x=Xt, y=Yt, z=Zt,
-                colorscale=[[0, layer["color"]], [1, layer["color"]]],
-                showscale=False,
-                name=f"{layer['name']} ({side})",
-                showlegend=(side == "footwall"),
-                opacity=0.95,
-                contours=dict(
-                    x=dict(show=True, color="rgba(0,0,0,0.25)", width=1),
-                    y=dict(show=True, color="rgba(0,0,0,0.25)", width=1)
-                )
+                name=layer["name"],
+                showlegend=(side == "footwall" and color_mode == "Lithology (Formasi Batuan)"),
+                opacity=1.0,
+                contours=contour_cfg,
+                **surf_kwargs
             ))
 
-            # Render bagian dasar lapisan terbawah (Basement) agar blok tertutup rapi
+            # 2. Dinding Samping Solid (4 Sisi: South, North, West, East) agar blok 3D tertutup penuh
+            wall_res_z = 6
+            z_wall_lin = np.linspace(layer["z_bot"], layer["z_top"], wall_res_z)
+
+            # Sisi Selatan (y = -block_y) & Utara (y = +block_y)
+            for y_edge in [-block_y, block_y]:
+                Xw, Zw = np.meshgrid(x_lin, z_wall_lin)
+                Yw = np.full_like(Xw, y_edge)
+                Xwd, Ywd, Zwd, Swd = apply_kinematics(Xw, Yw, Zw, side)
+                wall_color = dict(surfacecolor=Swd, colorscale="Turbo", cmin=0.0, cmax=1.5, showscale=False) if color_mode != "Lithology (Formasi Batuan)" else dict(colorscale=[[0, layer["color"]], [1, layer["color"]]], showscale=False)
+                fig3d.add_trace(go.Surface(x=Xwd, y=Ywd, z=Zwd, showlegend=False, opacity=1.0, **wall_color))
+
+            # Sisi Barat (x = -block_x) & Timur (x = +block_x)
+            for x_edge in [-block_x, block_x]:
+                Yw, Zw = np.meshgrid(y_lin, z_wall_lin)
+                Xw = np.full_like(Yw, x_edge)
+                Xwd, Ywd, Zwd, Swd = apply_kinematics(Xw, Yw, Zw, side)
+                wall_color = dict(surfacecolor=Swd, colorscale="Turbo", cmin=0.0, cmax=1.5, showscale=False) if color_mode != "Lithology (Formasi Batuan)" else dict(colorscale=[[0, layer["color"]], [1, layer["color"]]], showscale=False)
+                fig3d.add_trace(go.Surface(x=Xwd, y=Ywd, z=Zwd, showlegend=False, opacity=1.0, **wall_color))
+
+            # 3. Alas Bawah Basement
             if idx == len(layers) - 1:
-                Xb, Yb, Zb = deform_surface(X_base, Y_base, layer["z_bot"], side)
+                Xb, Yb, Zb, _ = apply_kinematics(X_base, Y_base, np.full_like(X_base, layer["z_bot"]), side)
                 fig3d.add_trace(go.Surface(
                     x=Xb, y=Yb, z=Zb,
                     colorscale=[[0, layer["color"]], [1, layer["color"]]],
                     showscale=False,
                     showlegend=False,
-                    opacity=0.95
+                    opacity=1.0
                 ))
 
     # Render Bidang Sesar (Fault Plane)
     if show_fault_plane:
-        u = np.linspace(-16, 16, 10)
-        v = np.linspace(-9, 9, 10)
+        u = np.linspace(-17, 17, 15)
+        v = np.linspace(-10, 10, 15)
         U, V = np.meshgrid(u, v)
         Xf = U * strike_vec[0] + V * dip_vec[0]
         Yf = U * strike_vec[1] + V * dip_vec[1]
@@ -199,54 +257,56 @@ with col_3d:
 
         fig3d.add_trace(go.Surface(
             x=Xf, y=Yf, z=Zf,
-            colorscale=[[0, "#FF4D4D"], [1, "#FF4D4D"]],
+            colorscale=[[0, "#FF3B3B"], [1, "#FF3B3B"]],
             showscale=False,
-            opacity=0.35,
+            opacity=0.32,
             name="Fault Plane",
             showlegend=True
         ))
 
     fig3d.update_layout(
-        title="Model Blok Geologi Struktur 3D",
+        title=f"Model Blok 3D Solid (Resolusi: {grid_res}×{grid_res} Grid)",
         scene=dict(
             xaxis_title="East (m)",
             yaxis_title="North (m)",
             zaxis_title="Elevation (m)",
             aspectmode="data",
-            camera=dict(eye=dict(x=1.5, y=-1.6, z=1.1))
+            camera=dict(eye=dict(x=1.55, y=-1.65, z=1.05))
         ),
         margin=dict(l=0, r=0, t=40, b=0),
-        height=620,
+        height=660,
         legend=dict(orientation="h", yanchor="bottom", y=0.01, xanchor="left", x=0.01)
     )
     st.plotly_chart(fig3d, use_container_width=True)
 
 with col_stereo:
-    # Proyeksi Equal-Area (Schmidt Net) Bidang Sesar & Slickenside Lineation
     st.subheader("Proyeksi Stereonet (Schmidt Net)")
     
-    # Lingkaran luar stereonet
-    theta = np.linspace(0, 2 * np.pi, 200)
+    theta = np.linspace(0, 2 * np.pi, 360)
     fig_stereo = go.Figure()
     fig_stereo.add_trace(go.Scatter(
         x=np.sin(theta), y=np.cos(theta),
         mode="lines", line=dict(color="#888", width=2),
-        name="Primitive Circle", showlegend=False
+        showlegend=False
     ))
 
-    # Hitung Great Circle bidang sesar (Equal-Area Schmidt projection)
-    alpha = np.linspace(-np.pi/2, np.pi/2, 100)
-    
-    # Vektor titik pada great circle di 3D (lower hemisphere)
+    # Tanda arah mata angin N, E, S, W
+    fig_stereo.add_trace(go.Scatter(
+        x=[0, 1.08, 0, -1.08], y=[1.08, 0, -1.08, 0],
+        mode="text", text=["N", "E", "S", "W"],
+        textfont=dict(size=12, color="#CBD5E0"),
+        showlegend=False
+    ))
+
+    alpha = np.linspace(-np.pi/2, np.pi/2, 180)
     gx, gy = [], []
     for a in alpha:
         pt = np.cos(a) * strike_vec + np.sin(a) * dip_vec
         if pt[2] > 0:
             pt = -pt
-        # Schmidt Equal-Area formula: R = sqrt(1 - |z|)
         horiz_norm = np.sqrt(pt[0]**2 + pt[1]**2)
         if horiz_norm > 1e-6:
-            R = np.sqrt(1.0 + pt[2]) # karena pt[2] <= 0
+            R = np.sqrt(1.0 + pt[2])
             gx.append(R * (pt[0] / horiz_norm))
             gy.append(R * (pt[1] / horiz_norm))
 
@@ -256,7 +316,6 @@ with col_stereo:
         name=f"Fault ({strike:03d}°/{dip:02d}°)"
     ))
 
-    # Plot Pole to Fault Plane
     pole = -normal_vec if normal_vec[2] > 0 else normal_vec
     p_horiz = np.sqrt(pole[0]**2 + pole[1]**2)
     if p_horiz > 1e-6:
@@ -271,7 +330,6 @@ with col_stereo:
         name="Pole to Fault"
     ))
 
-    # Plot Net-Slip Vector (Slickenside)
     if net_slip > 0.05:
         slip_3d = (-dip_slip * dip_vec) + (strike_slip * strike_vec)
         slip_3d /= np.linalg.norm(slip_3d)
@@ -283,23 +341,28 @@ with col_stereo:
 
         fig_stereo.add_trace(go.Scatter(
             x=[sx], y=[sy], mode="markers",
-            marker=dict(color="#F6AD55", size=11, symbol="star"),
+            marker=dict(color="#F6AD55", size=12, symbol="star"),
             name=f"Slip Vector (Rake {rake_deg:.0f}°)"
         ))
 
     fig_stereo.update_layout(
-        xaxis=dict(range=[-1.15, 1.15], visible=False),
-        yaxis=dict(range=[-1.15, 1.15], visible=False, scaleanchor="x", scaleratio=1),
-        margin=dict(l=10, r=10, t=20, b=10),
-        height=380,
+        xaxis=dict(range=[-1.2, 1.2], visible=False),
+        yaxis=dict(range=[-1.2, 1.2], visible=False, scaleanchor="x", scaleratio=1),
+        margin=dict(l=10, r=10, t=10, b=10),
+        height=390,
         legend=dict(orientation="h", yanchor="top", y=-0.02)
     )
     st.plotly_chart(fig_stereo, use_container_width=True)
 
-    # Ringkasan & Ekspor Data CSV
     summary_df = pd.DataFrame({
-        "Parameter": ["Strike (°)", "Dip (°)", "Dip-Slip (m)", "Strike-Slip (m)", "Net Slip (m)", "Throw (m)", "Heave (m)", "Rake (°)", "Regime"],
-        "Nilai": [strike, dip, dip_slip, strike_slip, round(net_slip, 2), round(throw, 2), round(heave, 2), round(rake_deg, 1), regime]
+        "Parameter": [
+            "Strike (°)", "Dip (°)", "Dip-Slip (m)", "Strike-Slip (m)",
+            "Net Slip (m)", "Throw (m)", "Heave (m)", "Rake (°)", "Regime"
+        ],
+        "Nilai": [
+            strike, dip, dip_slip, strike_slip,
+            round(net_slip, 2), round(throw, 2), round(heave, 2), round(rake_deg, 1), regime
+        ]
     })
     st.dataframe(summary_df, hide_index=True, use_container_width=True)
 

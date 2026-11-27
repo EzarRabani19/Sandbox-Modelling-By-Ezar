@@ -11,7 +11,7 @@ st.set_page_config(
 )
 
 st.title("GeoStruct 3D: High-Resolution Structural Geology Sandbox")
-st.caption("Pemodelan Blok Geologi 3D Solid Beresolusi Tinggi, Kinematika Sesar, Fault-Drag Folding, Strain Mapping, & Erosi.")
+st.caption("Pemodelan Blok Geologi 3D Solid (-100 m s.d. 100 m), Kinematika Sesar, Fault-Drag Folding, Strain Mapping, & Erosi.")
 
 # --- SIDEBAR: KONTROL PARAMETER GEOLOGI ---
 st.sidebar.header("1. Preset Skenario Tektonik")
@@ -29,29 +29,29 @@ preset = st.sidebar.selectbox(
 
 defaults = {
     "strike": 0, "dip": 60, "dip_slip": 0.0, "strike_slip": 0.0,
-    "fold_amp": 1.5, "drag_width": 4.5, "erosion": False, "erosion_lvl": 4.5
+    "fold_amp": 1.5, "drag_width": 25.0, "erosion": False, "erosion_lvl": 25.0
 }
 
 if preset == "1. Normal Fault (Rift / Ekstensional)":
-    defaults.update({"strike": 0, "dip": 60, "dip_slip": -5.0, "strike_slip": 0.0, "fold_amp": 1.6, "erosion": False})
+    defaults.update({"strike": 0, "dip": 60, "dip_slip": -30.0, "strike_slip": 0.0, "fold_amp": 1.6, "erosion": False})
 elif preset == "2. Thrust Fault + Drag Fold + Erosi":
-    defaults.update({"strike": 0, "dip": 35, "dip_slip": 5.5, "strike_slip": 0.0, "fold_amp": 2.4, "erosion": True, "erosion_lvl": 4.2})
+    defaults.update({"strike": 0, "dip": 35, "dip_slip": 35.0, "strike_slip": 0.0, "fold_amp": 2.4, "erosion": True, "erosion_lvl": 24.0})
 elif preset == "3. Strike-Slip Fault (Dextral)":
-    defaults.update({"strike": 15, "dip": 82, "dip_slip": 0.0, "strike_slip": 7.0, "fold_amp": 0.8, "erosion": False})
+    defaults.update({"strike": 15, "dip": 82, "dip_slip": 0.0, "strike_slip": 45.0, "fold_amp": 0.8, "erosion": False})
 elif preset == "4. Oblique-Slip Fault":
-    defaults.update({"strike": 25, "dip": 65, "dip_slip": 3.5, "strike_slip": 6.0, "fold_amp": 1.4, "erosion": False})
+    defaults.update({"strike": 25, "dip": 65, "dip_slip": 22.0, "strike_slip": 40.0, "fold_amp": 1.4, "erosion": False})
 
 st.sidebar.header("2. Geometri & Kinematika Sesar")
 strike = st.sidebar.slider("Strike (° - Right Hand Rule)", 0, 360, defaults["strike"], 1)
 dip = st.sidebar.slider("Dip Angle (°)", 15, 88, defaults["dip"], 1)
-dip_slip = st.sidebar.slider("Dip-Slip (m) [- Normal | + Reverse]", -10.0, 10.0, defaults["dip_slip"], 0.1)
-strike_slip = st.sidebar.slider("Strike-Slip (m) [- Sinistral | + Dextral]", -10.0, 10.0, defaults["strike_slip"], 0.1)
+dip_slip = st.sidebar.slider("Dip-Slip (m) [- Normal | + Reverse]", -60.0, 60.0, defaults["dip_slip"], 0.5)
+strike_slip = st.sidebar.slider("Strike-Slip (m) [- Sinistral | + Dextral]", -60.0, 60.0, defaults["strike_slip"], 0.5)
 
 st.sidebar.header("3. Lipatan & Proses Permukaan")
 fold_amp = st.sidebar.slider("Intensitas Fault-Drag Fold", 0.0, 4.0, defaults["fold_amp"], 0.1)
-drag_width = st.sidebar.slider("Lebar Zona Shear/Drag (m)", 1.0, 10.0, defaults["drag_width"], 0.25)
+drag_width = st.sidebar.slider("Lebar Zona Shear/Drag (m)", 5.0, 60.0, defaults["drag_width"], 1.0)
 enable_erosion = st.sidebar.checkbox("Aktifkan Erosi Permukaan", value=defaults["erosion"])
-erosion_lvl = st.sidebar.slider("Level Erosi (m)", -2.0, 10.0, defaults["erosion_lvl"], 0.1, disabled=not enable_erosion)
+erosion_lvl = st.sidebar.slider("Level Erosi (m)", -10.0, 60.0, defaults["erosion_lvl"], 0.5, disabled=not enable_erosion)
 
 st.sidebar.header("4. Resolusi & Mode Visualisasi")
 grid_res = st.sidebar.select_slider(
@@ -98,7 +98,7 @@ throw = abs(dip_slip * np.sin(dip_rad))
 net_slip = np.sqrt(dip_slip**2 + strike_slip**2)
 rake_deg = np.degrees(np.arctan2(dip_slip, strike_slip)) if net_slip > 0.01 else 0.0
 
-if abs(dip_slip) <= 0.2 and abs(strike_slip) <= 0.2:
+if abs(dip_slip) <= 0.5 and abs(strike_slip) <= 0.5:
     regime = "Undeformed"
 elif abs(dip_slip) > abs(strike_slip) * 1.5:
     regime = "Extensional (Normal Fault)" if dip_slip < 0 else "Compressional (Reverse/Thrust)"
@@ -114,18 +114,19 @@ m3.metric("Throw (Vertikal)", f"{throw:.2f} m")
 m4.metric("Heave (Horizontal)", f"{heave:.2f} m")
 m5.metric("Rake / Pitch", f"{rake_deg:.1f}°")
 
-# --- DEFINISI STRATIGRAFI DETAIL (7 LAPISAN) ---
+# --- DEFINISI STRATIGRAFI DETAIL (7 LAPISAN, SKALA PROPORSIONAL) ---
 layers = [
-    {"name": "Alluvium / Topsoil", "z_top": 5.0, "z_bot": 3.8, "color": "#C05621"},
-    {"name": "Upper Sandstone", "z_top": 3.8, "z_bot": 2.4, "color": "#ECC94B"},
-    {"name": "Shale Caprock", "z_top": 2.4, "z_bot": 1.2, "color": "#2F855A"},
-    {"name": "Reef Limestone (Reservoir)", "z_top": 1.2, "z_bot": -0.4, "color": "#3182CE"},
-    {"name": "Siltstone / Mudstone", "z_top": -0.4, "z_bot": -1.8, "color": "#38B2AC"},
-    {"name": "Lower Conglomerate", "z_top": -1.8, "z_bot": -3.2, "color": "#B7791F"},
-    {"name": "Crystalline Basement", "z_top": -3.2, "z_bot": -5.5, "color": "#4A5568"},
+    {"name": "Alluvium / Topsoil", "z_top": 30.0, "z_bot": 23.0, "color": "#C05621"},
+    {"name": "Upper Sandstone", "z_top": 23.0, "z_bot": 15.0, "color": "#ECC94B"},
+    {"name": "Shale Caprock", "z_top": 15.0, "z_bot": 8.0, "color": "#2F855A"},
+    {"name": "Reef Limestone (Reservoir)", "z_top": 8.0, "z_bot": -2.0, "color": "#3182CE"},
+    {"name": "Siltstone / Mudstone", "z_top": -2.0, "z_bot": -11.0, "color": "#38B2AC"},
+    {"name": "Lower Conglomerate", "z_top": -11.0, "z_bot": -20.0, "color": "#B7791F"},
+    {"name": "Crystalline Basement", "z_top": -20.0, "z_bot": -35.0, "color": "#4A5568"},
 ]
 
-block_x, block_y = 15.0, 12.0
+# Dimensi Blok diperpanjang dari -100 sampai 100
+block_x, block_y = 100.0, 100.0
 x_lin = np.linspace(-block_x, block_x, grid_res)
 y_lin = np.linspace(-block_y, block_y, grid_res)
 X_base, Y_base = np.meshgrid(x_lin, y_lin)
@@ -135,7 +136,6 @@ def apply_kinematics(X, Y, Z, side_mask):
     pts = np.stack([X, Y, Z], axis=-1)
     signed_dist = np.tensordot(pts, normal_vec, axes=([2], [0]))
 
-    # Toleransi snap agar tepi patahan menyentuh bidang sesar dengan presisi tanpa celah
     tol = (2 * block_x / grid_res) * 0.65
     if side_mask == "footwall":
         valid = signed_dist <= tol
@@ -148,7 +148,7 @@ def apply_kinematics(X, Y, Z, side_mask):
     Y_out = np.where(valid, Y, np.nan)
     Z_out = np.where(valid, Z, np.nan)
 
-    # Snap titik tepi tepat ke bidang sesar (signed_dist = 0) agar batas patahan tajam
+    # Snap titik tepi tepat ke bidang sesar (signed_dist = 0)
     if np.any(snap_mask):
         X_out = np.where(snap_mask, X_out - signed_dist * normal_vec[0], X_out)
         Y_out = np.where(snap_mask, Y_out - signed_dist * normal_vec[1], Y_out)
@@ -161,7 +161,7 @@ def apply_kinematics(X, Y, Z, side_mask):
     Z_out = Z_out + drag_sign * drag_factor * (dip_slip * 0.25) * fold_amp
 
     # Hitung nilai regangan (Shear Strain Intensity)
-    strain_val = drag_factor * (net_slip / 10.0) * (1.0 + fold_amp * 0.3)
+    strain_val = drag_factor * (net_slip / 60.0) * (1.0 + fold_amp * 0.3)
 
     # Pergeseran blok Hanging Wall
     if side_mask == "hanging_wall":
@@ -215,11 +215,10 @@ with col_3d:
                 **surf_kwargs
             ))
 
-            # 2. Dinding Samping Solid (4 Sisi: South, North, West, East) agar blok 3D tertutup penuh
+            # 2. Dinding Samping Solid (4 Sisi: South, North, West, East)
             wall_res_z = 6
             z_wall_lin = np.linspace(layer["z_bot"], layer["z_top"], wall_res_z)
 
-            # Sisi Selatan (y = -block_y) & Utara (y = +block_y)
             for y_edge in [-block_y, block_y]:
                 Xw, Zw = np.meshgrid(x_lin, z_wall_lin)
                 Yw = np.full_like(Xw, y_edge)
@@ -227,7 +226,6 @@ with col_3d:
                 wall_color = dict(surfacecolor=Swd, colorscale="Turbo", cmin=0.0, cmax=1.5, showscale=False) if color_mode != "Lithology (Formasi Batuan)" else dict(colorscale=[[0, layer["color"]], [1, layer["color"]]], showscale=False)
                 fig3d.add_trace(go.Surface(x=Xwd, y=Ywd, z=Zwd, showlegend=False, opacity=1.0, **wall_color))
 
-            # Sisi Barat (x = -block_x) & Timur (x = +block_x)
             for x_edge in [-block_x, block_x]:
                 Yw, Zw = np.meshgrid(y_lin, z_wall_lin)
                 Xw = np.full_like(Yw, x_edge)
@@ -246,10 +244,10 @@ with col_3d:
                     opacity=1.0
                 ))
 
-    # Render Bidang Sesar (Fault Plane)
+    # Render Bidang Sesar (Fault Plane) menyesuaikan lebar -100 s.d. 100
     if show_fault_plane:
-        u = np.linspace(-17, 17, 15)
-        v = np.linspace(-10, 10, 15)
+        u = np.linspace(-135, 135, 20)
+        v = np.linspace(-65, 65, 20)
         U, V = np.meshgrid(u, v)
         Xf = U * strike_vec[0] + V * dip_vec[0]
         Yf = U * strike_vec[1] + V * dip_vec[1]
@@ -265,11 +263,11 @@ with col_3d:
         ))
 
     fig3d.update_layout(
-        title=f"Model Blok 3D Solid (Resolusi: {grid_res}×{grid_res} Grid)",
+        title=f"Model Blok 3D Solid (-100 m s.d. 100 m | Resolusi: {grid_res}×{grid_res} Grid)",
         scene=dict(
-            xaxis_title="East (m)",
-            yaxis_title="North (m)",
-            zaxis_title="Elevation (m)",
+            xaxis=dict(title="East (m)", range=[-120, 120]),
+            yaxis=dict(title="North (m)", range=[-120, 120]),
+            zaxis=dict(title="Elevation (m)"),
             aspectmode="data",
             camera=dict(eye=dict(x=1.55, y=-1.65, z=1.05))
         ),
@@ -290,7 +288,6 @@ with col_stereo:
         showlegend=False
     ))
 
-    # Tanda arah mata angin N, E, S, W
     fig_stereo.add_trace(go.Scatter(
         x=[0, 1.08, 0, -1.08], y=[1.08, 0, -1.08, 0],
         mode="text", text=["N", "E", "S", "W"],

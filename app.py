@@ -56,7 +56,7 @@ erosion_lvl = st.sidebar.slider("Level Erosi (m)", -2.0, 10.0, defaults["erosion
 
 st.sidebar.header("4. Tampilan Visual")
 show_fault_plane = st.sidebar.checkbox("Tampilkan Bidang Sesar", value=True)
-grid_res = st.sidebar.select_slider("Resolusi Mesh 3D", options=[30, 45, 60, 80], value=50)
+grid_res = st.sidebar.select_slider("Resolusi Mesh 3D", options=[30, 45, 60, 80], value=45)
 
 # --- ENGINE KALKULASI VEKTOR GEOLOGI ---
 def compute_fault_vectors(strike_deg, dip_deg):
@@ -236,8 +236,6 @@ with col_stereo:
 
     # Hitung Great Circle bidang sesar (Equal-Area Schmidt projection)
     alpha = np.linspace(-np.pi/2, np.pi/2, 100)
-    s_rad = np.radians(strike)
-    d_rad = np.radians(dip)
     
     # Vektor titik pada great circle di 3D (lower hemisphere)
     gx, gy = [], []
